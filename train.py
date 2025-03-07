@@ -13,7 +13,7 @@ import os
 import torchvision
 import torch.optim as optim
 os.environ['CUDA_LAUNCH_BLOCKING'] = '0'
-os.environ['CUDA_VISIBLE_DEVICES']= '1'
+os.environ['CUDA_VISIBLE_DEVICES']= '0'
 import torch
 import torch.nn as nn
 from random import randint
@@ -125,7 +125,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         normals = gaussians.get_normal
         pseudo_normals = gaussians.get_minimum_axis
         pseudo_normals, _ = flip_align_view(pseudo_normals, dir_pp)
-        Ln = 1 - torch.nn.functional.cosine_similarity(normals, pseudo_normals).mean()
+        #Ln = 1 - torch.nn.functional.cosine_similarity(normals, pseudo_normals).mean()
 
         Ll1 = l1_loss(image, gt_image)
         color_loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
@@ -133,7 +133,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         LB = l1_loss(color, gt_image)
         basic_loss =  (1.0 - opt.lambda_dssim) * LB + opt.lambda_dssim * (1.0 - ssim(color, gt_image))
 
-        loss = color_loss + 0.001 * Ln  + 0.05 * basic_loss
+        loss = color_loss   + 0.05 * basic_loss
 
         loss.backward()
 

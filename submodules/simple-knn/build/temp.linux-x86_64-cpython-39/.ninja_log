@@ -1,0 +1,10 @@
+# ninja log v5
+0	9057	1737092117279033197	/home/naitriprg/Documents/polarization/SpeclatentGS/submodules/simple-knn/build/temp.linux-x86_64-cpython-39/simple_knn.o	71187c0fb946f313
+0	14669	1737092122887971627	/home/naitriprg/Documents/polarization/SpeclatentGS/submodules/simple-knn/build/temp.linux-x86_64-cpython-39/ext.o	fae6a72daba32a37
+0	43364	1737092151574656719	/home/naitriprg/Documents/polarization/SpeclatentGS/submodules/simple-knn/build/temp.linux-x86_64-cpython-39/spatial.o	1f6513ea41ac9bee
+3	8887	1737810020027928694	/home/naitriprg/Documents/polarization/polarized_relfection_removal/submodules/simple-knn/build/temp.linux-x86_64-cpython-39/simple_knn.o	8be82d4986e4a684
+3	14453	1737810025591867992	/home/naitriprg/Documents/polarization/polarized_relfection_removal/submodules/simple-knn/build/temp.linux-x86_64-cpython-39/ext.o	db7708f42cc633f6
+3	44434	1737810055566541124	/home/naitriprg/Documents/polarization/polarized_relfection_removal/submodules/simple-knn/build/temp.linux-x86_64-cpython-39/spatial.o	2fdac8e8b453ddab
+4	8845	1739642993905502384	/home/naitriprg/Documents/polarization/SpeclatentGS/submodules/simple-knn/build/temp.linux-x86_64-cpython-39/simple_knn.o	71187c0fb946f313
+4	14161	1739642999219444253	/home/naitriprg/Documents/polarization/SpeclatentGS/submodules/simple-knn/build/temp.linux-x86_64-cpython-39/ext.o	dbf0cb257edea42d
+4	43421	1739643028471124376	/home/naitriprg/Documents/polarization/SpeclatentGS/submodules/simple-knn/build/temp.linux-x86_64-cpython-39/spatial.o	1f6513ea41ac9bee
