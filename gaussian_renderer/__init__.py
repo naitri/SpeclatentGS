@@ -81,14 +81,15 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         scales = pc.get_scaling
         rotations = pc.get_rotation
 
-    normals = pc.get_normal
-
+    # normals = pc.get_normal
+    normals = pc.get_min_axis(viewpoint_camera.camera_center)
     direction_features = pc.mlp_direction_head(
         torch.cat([pc.direction_encoding(dir_pp), normals], dim=-1)).float()
 
     Ln = 0 
 
-    semantic = torch.cat([color_features, direction_features, normals], dim=-1)
+    semantic = torch.cat([color_features, direction_features], dim=-1)
+    # semantic = color_features
 
     rendered_features = []
     rendered_depths = []

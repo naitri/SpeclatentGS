@@ -1,0 +1,4 @@
+# ninja log v5
+0	7902	1732661354280388015	/home/naitriprg/Documents/polarization/gaussian-splatting/submodules/simple-knn/build/temp.linux-x86_64-cpython-37/simple_knn.o	4c493c40af380884
+0	13271	1732661359641336257	/home/naitriprg/Documents/polarization/gaussian-splatting/submodules/simple-knn/build/temp.linux-x86_64-cpython-37/ext.o	edb8f9b256a587f0
+1	33004	1732661379380145793	/home/naitriprg/Documents/polarization/gaussian-splatting/submodules/simple-knn/build/temp.linux-x86_64-cpython-37/spatial.o	6337723bea122278

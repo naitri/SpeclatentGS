@@ -5,7 +5,26 @@ import torch.nn.functional as F
 import numpy as np
 from functools import partial
 
+def params_to_stokes(stokes_params):
+    # Extract individual parameters
+    s0 = stokes_params[:, 0, :, :]  # Shape: [N, H, W]
+    dop = stokes_params[:, 1, :, :]  # Shape: [N, H, W]
 
+    psi = stokes_params[:, 2, :, :]  # Shape: [N, H, W]
+    psi = torch.remainder(psi, torch.pi) 
+
+    # Compute Stokes parameters
+    s1 = s0 * dop  * torch.cos(2 * psi)  # Shape: [N, H, W]
+    s2 = s0 * dop  * torch.sin(2 * psi)  # Shape: [N, H, W]
+    
+    # print(s1.max(),s1.min())
+    # print(dop.max(),dop.min())
+    # print(s2.max(),s2.min())
+    # input('q')
+    # Stack along the channel dimension (dim=1)
+    stokes = torch.stack([s0, s1, s2], dim=1)  
+
+    return stokes
 def embedding_fn(inputs):
     embed_fns = []
     d = 3
@@ -279,16 +298,14 @@ class MyNet(nn.Module):
 
         n_input = len(inputs)
 
-        x = inputs[0][:, :8, :, :]
-
-        f = inputs[0][:, 8:16, :, :]
+        f = inputs[0][:,:8, :, :]
 
         sh_f = list(f.shape)
         sh_f[1] = 3
+        
 
-        tint = inputs[0][:, 16, :, :]
 
-        views = inputs[0][:, 20:, :, :]
+        views = inputs[0][:, 9:, :, :]
 
         # highlight
         f = self.feat_extract[21](f)
@@ -298,63 +315,23 @@ class MyNet(nn.Module):
         f = self.feat_extract[22](f)
         f = self.Decoder[3](f)
         f = self.feat_extract[23](f)
+        stokes_param   = f[:, :, :, :] 
 
-        mask = tint
-
-        highlight = f * mask
-
-        s = x
-        z1 = x
-
-        # color
-        x = self.feat_extract[1](x)
-        x = self.Encoder[1](x)
-        z2 = x
-
-        x = self.feat_extract[2](x)
-        x = self.Encoder[2](x)
-        z3 = x
-
-        x = self.feat_extract[6](x)
-        x = self.Encoder[3](x)
-
-        x = self.up(x)
-
-        x = self.Convs[0](x)
-        x = F.interpolate(x, z3.shape[-2:])
-        x = torch.cat([x, z3], dim=1)
-        x = self.Decoder[0](x)
-
-        x = self.feat_extract[9](x)
-        x = self.up(x)
-
-        x = self.Convs[1](x)
-        x = F.interpolate(x, z2.shape[-2:])
-        x = torch.cat([x, z2], dim=1)
-        x = self.Decoder[1](x)
-
-        x = self.feat_extract[10](x)
-        x = self.up(x)
-
-        x = self.Convs[2](x)
-        x = F.interpolate(x, z1.shape[-2:])
-        x = torch.cat([x, z1], dim=1)
-        x = self.Decoder[2](x)
-
-        x = self.feat_extract[11](x)
-
-        z = self.feat_extract[5](x)
-
-        color = z
-
-        z = z + highlight
-
-        return {'im_out': z,
-                's_out': s,
-                'mask_out': mask,
-                'highlight_out': highlight,
-                'f_out': f,
-                'color_out': color}
+        #CHANGED
+        stokes_params = torch.cat([
+            torch.sigmoid(stokes_param[:, 0:2, :, :]), stokes_param[:, 2:3, :, :]], dim=1)  # s0, dop ~ [0,1], chi, psi
+        #Convert stokes_param -> physically valid stokes
+        stokes  = params_to_stokes(stokes_params)
+        # print(stokes_params.shape)
+        # print(stokes_param.shape)
+        # print(stokes.shape)
+        
+       
+        return {
+                's_out': stokes,
+                'dop':stokes_params[:, 1, :, :],  # Shape: [N, H, W]
+                'aop': stokes_params[:, 2, :, :]
+        }
 
 
 if __name__ == '__main__':

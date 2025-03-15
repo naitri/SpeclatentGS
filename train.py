@@ -111,29 +111,43 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         image = model(*rendered_features)
 
-        mask = image['mask_out'].squeeze(0)
-        color = image['color_out'].squeeze(0)
-        image = image['im_out'].squeeze(0)
+        # mask = image['mask_out'].squeeze(0)
+        # color = image['color_out'].squeeze(0)
+        stokes = image['s_out'].squeeze(0)
+        aop = image['aop'].squeeze(0)
+        dop = image['dop'].squeeze(0)
 
         # Color Loss
         semantic_loss = 0
 
-        gt_image = viewpoint_cam.original_image.cuda()
+        gt_image = torch.from_numpy(viewpoint_cam.stokes_world).to('cuda') 
+        stokes_gt_world = gt_image.permute(2,0,1)
+        # print(gt_image.shape)
+        # print(stokes.shape)
 
-        dir_pp = (gaussians.get_xyz - viewpoint_camera_center.repeat(gaussians.get_xyz.shape[0], 1))
-        dir_pp = dir_pp / dir_pp.norm(dim=1, keepdim=True)
-        normals = gaussians.get_normal
-        pseudo_normals = gaussians.get_minimum_axis
-        pseudo_normals, _ = flip_align_view(pseudo_normals, dir_pp)
+        # dir_pp = (gaussians.get_xyz - viewpoint_camera_center.repeat(gaussians.get_xyz.shape[0], 1))
+        # dir_pp = dir_pp / dir_pp.norm(dim=1, keepdim=True)
+        # normals = gaussians.get_normal
+        # pseudo_normals = gaussians.get_minimum_axis
+        # pseudo_normals, _ = flip_align_view(pseudo_normals, dir_pp)
         #Ln = 1 - torch.nn.functional.cosine_similarity(normals, pseudo_normals).mean()
 
-        Ll1 = l1_loss(image, gt_image)
-        color_loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+        # Ll1 = l1_loss(stokes, stokes_gt_world)
+                # Compute per-channel losses
+        Ll1_s0 = l1_loss(stokes[0, :, :], stokes_gt_world[0, :, :]) 
+        # Ll1_dop = l1_loss(dop, torch.from_numpy(viewpoint_cam.dop).to('cuda') ) 
+        # Ll1_aop = l1_loss(aop, torch.from_numpy(viewpoint_cam.aop).to('cuda') ) 
+        Ll1_s1 = l1_loss(stokes[1, :, :], stokes_gt_world[1, :, :]) * 2
+        Ll1_s2 = l1_loss(stokes[2, :, :], stokes_gt_world[2, :, :]) * 2
 
-        LB = l1_loss(color, gt_image)
-        basic_loss =  (1.0 - opt.lambda_dssim) * LB + opt.lambda_dssim * (1.0 - ssim(color, gt_image))
+        # # Aggregate the weighted L1 loss
+        # Ll1 = Ll1_s0 + Ll1_s1 + Ll1_s2
+        # color_loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(stokes, stokes_gt_world))
 
-        loss = color_loss   + 0.05 * basic_loss
+        # LB = l1_loss(color, gt_image)
+        # basic_loss =  (1.0 - opt.lambda_dssim) * LB + opt.lambda_dssim * (1.0 - ssim(color, gt_image))
+
+        loss = Ll1_s0 + 0.2* Ll1_s1+ 0.2* Ll1_s2
 
         loss.backward()
 
@@ -143,14 +157,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             # Progress bar
             ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
             if iteration % 10 == 0:
-                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{5}f}", "C_Loss": f"{color_loss:.{5}f}", "S_Loss": f"{semantic_loss:.{5}f}"})
+                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{5}f}", "C_Loss": f"{Ll1_s0:.{5}f}", "S_Loss": f"{loss:.{5}f}"})
                 progress_bar.update(10)
             if iteration == opt.iterations:
                 progress_bar.close()
 
             # Log and save
 
-            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), model=model)
+            training_report(tb_writer, iteration, Ll1_s0, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), model=model)
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
@@ -232,19 +246,21 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                         rays_d = torch.from_numpy(
                             views_dir(viewpoint.image_height, viewpoint.image_width, viewpoint.K, viewpoint.c2w)).cuda()
 
-                        normals = rendered_features[0].squeeze(0).permute(1, 2, 0)[:, :, 17:]
+                        # normals = rendered_features[0].squeeze(0).permute(1, 2, 0)[:, :, 17:]
                         views_emd = embedding_fn(rays_d).permute(2, 0, 1).unsqueeze(0)
 
                         rendered_features[0] = torch.cat((rendered_features[0], views_emd), dim=1)
 
 
                         image = model(*rendered_features)
-                        image_save = image['im_out'].squeeze(0)
+                        image_save = image['s_out'].squeeze(0)
                         image = torch.clamp(image_save, 0.0, 1.0)
                     else:
                         image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0)
 
-                    gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
+                    # gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
+                    stokes_gt_world = torch.from_numpy(viewpoint.stokes_world).to('cuda') 
+                    gt_image = stokes_gt_world.permute(2,0,1)
 
                     if tb_writer and (idx < 5):
                         tb_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name), image[None], global_step=iteration)

@@ -21,7 +21,7 @@ from utils.graphics_utils import views_dir
 class Camera(nn.Module):
     def __init__(self, colmap_id, R, T, FoVx, FoVy, image, gt_alpha_mask,
                  image_name, semantic_image, semantic_image_name, semantic_classes,
-                 uid, trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device="cuda"
+                 uid, stokes_world,dop,aop,trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device="cuda"
                  ):
         super(Camera, self).__init__()
 
@@ -32,6 +32,9 @@ class Camera(nn.Module):
         self.FoVx = FoVx
         self.FoVy = FoVy
         self.image_name = image_name
+        self.stokes_world = stokes_world
+        self.dop = dop
+        self.aop = aop
         # self.semantic_image_name = semantic_image_name
         # self.color_map_np = label_colormap()[semantic_classes]
 

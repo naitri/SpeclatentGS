@@ -108,7 +108,7 @@ class GaussianModel:
             },
         )
         self.mlp_normal_head = tcnn.Network(
-            n_input_dims=16,
+            n_input_dims=8,
             n_output_dims=3,
             network_config={
                 "otype": "FullyFusedMLP",
@@ -194,6 +194,20 @@ class GaussianModel:
         # normal = self.mlp_normal_head(
         #     torch.cat((self.get_semantic, self.get_rotation, self.get_scaling, self._xyz), dim=1))
         return normal
+    
+    def get_min_axis(self, cam_o):
+        pts = self.get_xyz
+        p2o = cam_o[None] - pts
+        scales = self.get_scaling
+        min_axis_id = torch.argmin(scales, dim = -1, keepdim=True)
+        min_axis = torch.zeros_like(scales).scatter(1, min_axis_id, 1)
+
+        rot_matrix = build_rotation(self.get_rotation)
+        ndir = torch.bmm(rot_matrix, min_axis.unsqueeze(-1)).squeeze(-1)
+
+        neg_msk = torch.sum(p2o*ndir, dim=-1) < 0
+        ndir[neg_msk] = -ndir[neg_msk] # make sure normal orient to camera
+        return ndir
 
     # @property
     # def get_features(self):

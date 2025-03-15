@@ -22,7 +22,71 @@ from pathlib import Path
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
+import cv2
+import polanalyser as pa
+from utils.stokes_utils import *
 
+def compute_dop_aop(stokes_world):
+    s0 = stokes_world[:,:,0]
+    s1 = stokes_world[:,:,1]
+    s2= stokes_world[:,:,2]
+    DoP = np.sqrt(s1**2 + s2**2) / (s0 + 1e-8)
+    DoP = np.clip(DoP, 0, 1)
+    AoP = 0.5 * np.arctan2(s2, s1)  # Angle in radians
+    # AoP = np.degrees(AoP)  # Convert to degrees
+    AoP = (AoP + np.pi) % np.pi
+    return DoP, AoP
+
+def decompose_raw_polar(path):
+
+
+    image_array = cv2.imread(path, cv2.IMREAD_ANYDEPTH)
+    if image_array is None:
+        raise RuntimeError(f"Failed to load image from {path}")
+    I90  = cv2.cvtColor(image_array[0::2, 0::2], cv2.COLOR_BAYER_BG2GRAY)/255   # top-left
+    I45  = cv2.cvtColor(image_array[0::2, 1::2], cv2.COLOR_BAYER_BG2GRAY)/255  # top-right
+    I135 = cv2.cvtColor(image_array[1::2, 0::2], cv2.COLOR_BAYER_BG2GRAY) /255  # bottom-left
+    I0   = cv2.cvtColor(image_array[1::2, 1::2], cv2.COLOR_BAYER_BG2GRAY) /255  # bottom-right
+
+    return I0, I45, I90, I135
+
+def compute_local_stokes_rgb(I0_bgr, I45_bgr, I90_bgr, I135_bgr):
+        angles = np.deg2rad([0, 45, 90,135])
+        I0   = I0_bgr.astype(np.float32) / 255.
+        I45  = I45_bgr.astype(np.float32) / 255.
+        I90 = I90_bgr.astype(np.float32) / 255.
+        I135 = I135_bgr.astype(np.float32) / 255.
+         # Compute Stokes vectors separately for each RGB channel
+        img_stokes_R = pa.calcStokes([I0[..., 0], I45[..., 0], I90[..., 0], I135[..., 0]], angles)
+        img_stokes_G = pa.calcStokes([I0[..., 1], I45[..., 1], I90[..., 1], I135[..., 1]], angles)
+        img_stokes_B = pa.calcStokes([I0[..., 2], I45[..., 2], I90[..., 2], I135[..., 2]], angles)
+
+        # Merge the separate per-channel Stokes parameters into an RGB image
+        s0_merged = np.stack([img_stokes_R[..., 0], img_stokes_G[..., 0], img_stokes_B[..., 0]], axis=-1)
+        s1_merged = np.stack([img_stokes_R[..., 1], img_stokes_G[..., 1], img_stokes_B[..., 1]], axis=-1)
+        s2_merged = np.stack([img_stokes_R[..., 2], img_stokes_G[..., 2], img_stokes_B[..., 2]], axis=-1)
+
+        stokes_local = np.stack([s0_merged,s1_merged,s2_merged], axis=-1)
+        return stokes_local
+
+def compute_local_stokes_gray(I0_gray, I45_gray, I90_gray, I135_gray):
+        s0 = 0.5*(I0_gray+ I45_gray+ I90_gray+ I135_gray)
+        s1 = I0_gray - I90_gray
+        s2 = I45_gray - I135_gray
+        s3 = np.zeros_like(s0, dtype=np.float32)
+    
+        s0 = np.clip(s0, 0, 1)
+        s1 = np.clip(s1, -1, 1)
+        s2 = np.clip(s2, -1, 1)
+ 
+        stokes_local = np.stack([s0, s1, s2], axis=-1).astype(np.float32)
+        
+        # angles = np.deg2rad([0, 45, 90,135])
+        # stokes_local = pa.calcStokes([I0_gray, I45_gray, I90_gray, I135_gray], angles)
+        # stokes_local[:,:,0] = np.clip(stokes_local[:,:,0], 0, 1)
+        # stokes_local[:,:,1] = np.clip(stokes_local[:,:,0], -1, 1)
+        # stokes_local[:,:,2] = np.clip(stokes_local[:,:,0], -1, 1)
+        return stokes_local
 class CameraInfo(NamedTuple):
     uid: int
     R: np.array
@@ -44,7 +108,9 @@ class CameraInfo(NamedTuple):
     num_semantic_classes: None
     width: int
     height: int
-
+    stokes_world: np.array = None
+    dop : np.array = None
+    aop: np.array = None
 class SceneInfo(NamedTuple):
     point_cloud: BasicPointCloud
     train_cameras: list
@@ -106,8 +172,64 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
 
         image_path = os.path.join(images_folder, os.path.basename(extr.name))
         image_name = os.path.basename(image_path).split(".")[0]
-        image = Image.open(image_path)
+        I0_gray, I45_gray, I90_gray, I135_gray = decompose_raw_polar(image_path)
+        avg_rgb = 0.25*(I0_gray.astype(np.float32) + I0_gray.astype(np.float32) +
+                        I0_gray.astype(np.float32) + I0_gray.astype(np.float32))
+        avg_rgb = avg_rgb.clip(0,255).astype(np.uint8)
+        image = Image.fromarray(avg_rgb)
 
+  
+
+
+
+      
+        #rotate stokes vector
+        stokes_local = compute_local_stokes_gray(I0_gray, I45_gray, I90_gray, I135_gray)
+    
+      
+        #rotate stokes vector
+        cam2world = R # rotation matrix.
+        x_cam, y_cam, v_cam = stokes_basis_cam(pixel_H=height, pixel_W=width)
+
+        x_world, x_world_target = stokes_basis_cam_to_world(cam2world, v_cam, x_cam)
+
+        rot_mat = rotate_mat_stokes_basis(v_cam, x_world, x_world_target)
+
+        stokes_target = rotate_stokes_vector(rot_mat, stokes_local)
+        stokes_world = stokes_target.transpose(1,2,0)
+       
+        img_dolp,img_aolp = compute_dop_aop(np.array(stokes_world))
+        # print(img_dolp.min(), img_dolp.max())
+        # print(img_aolp.min(), img_aolp.max())
+        # img_dolp = pa.cvtStokesToDoLP(stokes_world)
+        # img_aolp = pa.cvtStokesToAoLP(stokes_world)
+  
+
+        #Inv Rotation Check->>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        # print(stokes_world.shape)
+        
+        # rot_mat_inv = torch.linalg.inv(rot_mat)
+        
+        # stokes_pred_local = rotate_stokes_vector(rot_mat_inv, stokes_world)
+        # stokes_local_rot   = stokes_pred_local
+        # print(">>>>>>>>>>>>>>>>>>>>>>>>")
+        
+     
+        # print(stokes_local_rot.shape)
+        # print(stokes_local_rot[:,:,0].shape)
+        # import matplotlib.pyplot as plt
+        # plt.imshow(img_aolp,cmap="hsv")
+        # plt.title("Averaged RGB Image from Polarized Inputs")
+        # plt.axis('off')
+        # plt.show()
+        # input('q')
+        # assert torch.allclose(
+        #     torch.tensor(stokes_local_rot, dtype=torch.float32), 
+        #     torch.tensor(stokes_local, dtype=torch.float32), 
+        #     atol=1e-3
+        # )
+        # input('q')
+        #Inv Rotation Check->>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         # semantic_image
         base_dir, _ = os.path.split(images_folder)
         # semantic_folder = os.path.join(base_dir, "semantic_class")
@@ -143,7 +265,7 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
                               semantic_image=None, semantic_path=None,
                               semantic_image_name=None,
                               semantic_classes=None, num_semantic_classes=None,
-                              width=width, height=height)
+                              width=width, height=height,stokes_world=stokes_world,dop = img_dolp, aop= img_aolp)
         cam_infos.append(cam_info)
     sys.stdout.write('\n')
     return cam_infos

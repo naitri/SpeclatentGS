@@ -64,7 +64,7 @@ def loadCam(args, id, cam_info, resolution_scale):
                   semantic_image=gt_semantic_image,
                   semantic_image_name=cam_info.semantic_image_name,
                   semantic_classes=cam_info.semantic_classes,
-                  uid=id, data_device=args.data_device)
+                  uid=id, stokes_world=cam_info.stokes_world,dop= cam_info.dop, aop=cam_info.aop,data_device=args.data_device)
 
 def cameraList_from_camInfos(cam_infos, resolution_scale, args):
     camera_list = []

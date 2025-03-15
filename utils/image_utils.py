@@ -12,6 +12,11 @@
 import torch
 from sklearn.metrics import confusion_matrix
 import numpy as np
+def psnr_np(img1, img2):
+    mse = np.mean((img1 - img2) ** 2)
+    if mse == 0:
+        return float("inf")
+    return 20 * np.log10(1.0 / np.sqrt(mse))
 
 def mse(img1, img2):
     return (((img1 - img2)) ** 2).view(img1.shape[0], -1).mean(1, keepdim=True)
